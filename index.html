@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LKR WealthTracker | Offline Savings & Expense Ledger</title>
+  <meta name="description"
+    content="An elegant, client-side, offline personal finance tracker in Sri Lankan Rupees. Save locally and control your finances.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header>
+      <div class="logo-section">
+        <h1 id="app-logo">RupeeSave</h1>
+        <p>Offline Wealth & Savings Ledger</p>
+      </div>
+
+      <div class="action-buttons">
+        <button id="btn-export" class="btn" title="Export data to JSON file">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+          </svg>
+          Export
+        </button>
+        <button id="btn-import-trigger" class="btn" title="Import data from JSON backup">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+          </svg>
+          Import
+        </button>
+        <input type="file" id="import-file-input" accept=".json">
+
+        <button id="btn-add-tx-trigger" class="btn btn-primary">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          Add Record
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Savings Display (Hero Card) -->
+    <section class="glass-panel hero-card" id="overall-savings-card">
+      <div class="hero-info">
+        <h3>Cumulative Savings</h3>
+        <div style="display: flex; align-items: baseline;">
+          <span class="currency-symbol">Rs.</span>
+          <span id="overall-savings" class="savings-amount">0.00</span>
+        </div>
+      </div>
+
+      <div class="hero-extra">
+        <div class="savings-trend">
+          <div>Annual Savings rate</div>
+          <span id="savings-rate">0%</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Dashboard Metrics (This Month or selected month) -->
+    <section class="dashboard-grid">
+      <!-- Monthly Income -->
+      <div class="glass-panel metric-card income-card">
+        <div class="metric-icon-box">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path d="M12 19V5M5 12l7-7 7 7" />
+          </svg>
+        </div>
+        <div class="metric-info">
+          <span class="metric-title" id="income-card-title">Income (This Month)</span>
+          <span class="metric-value">
+            <span class="lkr-unit">Rs.</span>
+            <span id="month-income">0.00</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Monthly Expense -->
+      <div class="glass-panel metric-card expense-card">
+        <div class="metric-icon-box">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path d="M12 5v14M5 12l7 7 7-7" />
+          </svg>
+        </div>
+        <div class="metric-info">
+          <span class="metric-title" id="expense-card-title">Expenses (This Month)</span>
+          <span class="metric-value">
+            <span class="lkr-unit">Rs.</span>
+            <span id="month-expense">0.00</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Net Monthly Savings -->
+      <div class="glass-panel metric-card savings-card">
+        <div class="metric-icon-box">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path
+              d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <div class="metric-info">
+          <span class="metric-title" id="savings-card-title">Net Savings (This Month)</span>
+          <span class="metric-value">
+            <span class="lkr-unit">Rs.</span>
+            <span id="month-savings">0.00</span>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Visual Savings Chart -->
+    <section class="glass-panel viz-panel">
+      <div class="chart-header">
+        <h3 class="section-title">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2" />
+          </svg>
+          Monthly Flow Chart
+        </h3>
+        <div style="font-size: 0.85rem; color: var(--text-secondary);">Yearly Trend</div>
+      </div>
+      <div class="chart-container" id="bar-chart-container">
+        <!-- Dynmically rendered columns from JS -->
+        <div class="empty-state" style="padding: 1rem; width: 100%;">
+          No chart data available. Add records to see trends.
+        </div>
+      </div>
+    </section>
+
+    <!-- Split ledger & History view -->
+    <div class="split-layout">
+      <!-- Ledger / Transaction History -->
+      <section class="glass-panel ledger-panel">
+        <div class="section-title-bar">
+          <h3 class="section-title">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </svg>
+            Transaction Log
+          </h3>
+        </div>
+
+        <div class="control-row">
+          <div class="search-wrapper">
+            <svg class="search-icon" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input type="text" id="search-tx" class="search-input" placeholder="Search records...">
+          </div>
+
+          <select id="filter-type" class="filter-select">
+            <option value="all">All Types</option>
+            <option value="income">Incomes Only</option>
+            <option value="expense">Expenses Only</option>
+          </select>
+        </div>
+
+        <!-- Scrollable list of ledger items -->
+        <div class="ledger-list" id="ledger-items-container">
+          <!-- Rendered by app.js -->
+        </div>
+      </section>
+
+      <!-- Monthly Aggregates History -->
+      <section class="glass-panel history-panel">
+        <div class="section-title-bar">
+          <h3 class="section-title">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            Monthly Timeline
+          </h3>
+          <button id="btn-reset-filters" class="btn btn-icon-only" title="Show all transactions"
+            style="font-size: 0.75rem; padding: 0.35rem 0.65rem;">
+            Clear Focus
+          </button>
+        </div>
+
+        <!-- Scrollable list of month summaries -->
+        <div class="history-list" id="history-months-container">
+          <!-- Rendered by app.js -->
+        </div>
+      </section>
+    </div>
+
+    <!-- Footer link / instructions -->
+    <div class="footer-info">
+      <span>Data stored locally in your browser.</span>
+      <span id="btn-clear-all" class="footer-link">Clear Database</span>
+    </div>
+  </div>
+
+  <!-- Add Record Modal Overlay -->
+  <div class="modal-overlay" id="tx-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modal-title">New Entry</h2>
+        <button id="modal-close" class="btn-close">&times;</button>
+      </div>
+
+      <form id="tx-form">
+        <div class="modal-body">
+          <!-- Toggle Income / Expense -->
+          <div class="type-toggle-group">
+            <button type="button" id="toggle-income" class="type-toggle-btn active income">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path d="M12 19V5M5 12l7-7 7 7" />
+              </svg>
+              Income
+            </button>
+            <button type="button" id="toggle-expense" class="type-toggle-btn expense">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path d="M12 5v14M5 12l7 7 7-7" />
+              </svg>
+              Expense
+            </button>
+          </div>
+
+          <!-- Amount In LKR -->
+          <div class="form-group">
+            <label for="tx-amount">Amount (LKR) *</label>
+            <div class="input-container">
+              <span class="input-icon-left">Rs.</span>
+              <input type="number" id="tx-amount" class="form-control form-control-icon form-control-amount"
+                placeholder="0.00" min="0.01" step="any" required>
+            </div>
+          </div>
+
+          <!-- Date -->
+          <div class="form-group">
+            <label for="tx-date">Date *</label>
+            <input type="date" id="tx-date" class="form-control" required>
+          </div>
+
+          <!-- Category (Selection Buttons grid) -->
+          <div class="form-group">
+            <label>Category *</label>
+            <div class="category-grid" id="category-grid-container">
+              <!-- Dynamically populated selection buttons by app.js based on type toggle -->
+            </div>
+          </div>
+
+          <!-- Notes / Description -->
+          <div class="form-group">
+            <label for="tx-desc">Description</label>
+            <input type="text" id="tx-desc" class="form-control" placeholder="E.g., Monthly Salary, Grocery Run...">
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" id="modal-cancel" class="btn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Entry</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast system wrapper -->
+  <div class="toast-container" id="toast-wrapper"></div>
+
+  <!-- Main JavaScript File -->
+  <script src="app.js"></script>
+</body>
+
+</html>
