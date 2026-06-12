@@ -263,8 +263,53 @@
     </div>
   </div>
 
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+<!-- Add Firebase SDKs in index.html -->
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
+
+<script>
+  // 1. Firebase config (replace with your actual values from Firebase console)
+  const firebaseConfig = {
+    apiKey: "AIzaSyAjuG2H8sGYreDtS-qPKQmIe9uKMKJv18g",
+    authDomain: "reytracksmoneyonline.firebaseapp.com",
+    databaseURL: "https://reytracksmoneyonline-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "reytracksmoneyonline",
+    storageBucket: "reytracksmoneyonline.firebasestorage.app",
+    messagingSenderId: "606090512333",
+    appId: "1:606090512333:web:bd0cb592e39ff14982a684"
+  };
+
+  // 2. Initialize Firebase
+  const app = firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  // 3. Add a record
+  function addRecord(record) {
+    db.ref("records").push(record);
+  }
+
+  // 4. Listen for realtime updates
+  db.ref("records").on("value", (snapshot) => {
+    const data = snapshot.val() || {};
+    const recordsArray = Object.values(data);
+    displayRecords(recordsArray); // call your existing UI update function
+  });
+
+  // Example: Hook into your form
+  document.getElementById("addRecordForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const amount = document.getElementById("amount").value;
+    const note = document.getElementById("note").value;
+
+    addRecord({
+      amount: amount,
+      note: note,
+      timestamp: Date.now()
+    });
+
+    e.target.reset();
+  });
+</script>
 
 
   <!-- Toast system wrapper -->
