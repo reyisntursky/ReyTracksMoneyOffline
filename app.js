@@ -233,16 +233,21 @@ const initFirebase = (config) => {
   try {
     if (databaseRef) {
       databaseRef.off();
+      databaseRef = null;
     }
 
     if (firebase.apps.length > 0) {
+      // Async delete then re-init
       firebase.apps[0].delete().then(() => {
         doInit(config);
+      }).catch((err) => {
+        console.warn('App delete warning:', err);
+        doInit(config);
       });
-      return true;
+    } else {
+      // No existing app — connect synchronously
+      doInit(config);
     }
-
-    doInit(config);
     return true;
   } catch (error) {
     console.error("Firebase init error:", error);
@@ -391,54 +396,64 @@ const loadFromLocalStorage = () => {
 // Init application state
 const init = () => {
   loadFirebaseConfigInputs();
-  
+
+  // Always use the hardcoded credentials — this is a personal app
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyAjuG2H8sGYreDtS-qPKQmIe9uKMKJv18g",
+    authDomain: "reytracksmoneyonline.firebaseapp.com",
+    databaseURL: "https://reytracksmoneyonline-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "reytracksmoneyonline",
+    storageBucket: "reytracksmoneyonline.firebasestorage.app",
+    messagingSenderId: "606090512333",
+    appId: "1:606090512333:web:bd0cb592e39ff14982a684"
+  };
+
+  // Merge with any user-saved overrides from localStorage
   let configStr = localStorage.getItem('rupee_save_firebase_config');
-  let config = null;
-  
+  let config = FIREBASE_CONFIG;
   if (configStr) {
     try {
-      config = JSON.parse(configStr);
+      const saved = JSON.parse(configStr);
+      // Only use saved config if it has a valid databaseURL
+      if (saved && saved.databaseURL) {
+        config = { ...FIREBASE_CONFIG, ...saved };
+      }
     } catch(e) {
-      console.error(e);
+      console.error('Config parse error:', e);
     }
-  } else {
-    // Default credentials provided by the user
-    config = {
-      apiKey: "AIzaSyAjuG2H8sGYreDtS-qPKQmIe9uKMKJv18g",
-      authDomain: "reytracksmoneyonline.firebaseapp.com",
-      databaseURL: "https://reytracksmoneyonline-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: "reytracksmoneyonline",
-      appId: "1:606090512333:web:bd0cb592e39ff14982a684"
-    };
-    // Save these defaults so they appear configured immediately
-    localStorage.setItem('rupee_save_firebase_config', JSON.stringify(config));
   }
-  
-  let firebaseActive = false;
-  if (config) {
-    firebaseActive = initFirebase(config);
-  }
-  
+
+  // Always persist the resolved config
+  localStorage.setItem('rupee_save_firebase_config', JSON.stringify(config));
+
+  // Set syncing badge immediately so user sees progress
+  setConnectionStatus('syncing');
+
+  // Attempt Firebase connection
+  const firebaseActive = initFirebase(config);
+
   if (!firebaseActive) {
     loadFromLocalStorage();
     setConnectionStatus('disconnected');
   }
-  
+
   // Set default date in form to today
   elements.txDate.value = new Date().toISOString().split('T')[0];
-  
+
   // Add listeners
   setupEventListeners();
   setupTabListeners();
   setupAuthListeners();
-  
-  // Initial render
-  render();
-  updateFirebaseUI();
-  
+
+  // Initial render (Firebase listener will re-render when data arrives)
   if (!firebaseActive) {
-    showToast('Welcome to RupeeSave! Ready offline.');
+    render();
+    showToast('Running in offline mode.');
+  } else {
+    render(); // render with local/empty data while Firebase loads
   }
+
+  updateFirebaseUI();
 };
 
 // Inject elegant default mock data so app doesn't look empty on startup
