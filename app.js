@@ -187,25 +187,28 @@ const updateFirebaseUI = () => {
 
 // Database listener configurations
 const setupDatabaseListener = () => {
-  let path = 'public/transactions';
-  if (currentUser) {
-    path = `users/${currentUser.uid}/transactions`;
+  if (!database) return;
+
+  // Detach previous listener
+  if (databaseRef) {
+    databaseRef.off();
+    databaseRef = null;
   }
-  
+
+  const path = currentUser
+    ? `users/${currentUser.uid}/transactions`
+    : 'public/transactions';
+
   setConnectionStatus('syncing');
   databaseRef = database.ref(path);
-  
+
   databaseRef.on('value', (snapshot) => {
     const data = snapshot.val();
     if (data) {
-      const list = [];
-      Object.keys(data).forEach(key => {
-        list.push({
-          id: key,
-          ...data[key]
-        });
-      });
-      state.transactions = list;
+      state.transactions = Object.keys(data).map(key => ({
+        id: key,
+        ...data[key]
+      }));
     } else {
       state.transactions = [];
     }
@@ -213,19 +216,53 @@ const setupDatabaseListener = () => {
     setConnectionStatus('connected');
     updateFirebaseUI();
   }, (error) => {
-    console.error("Database read error:", error);
+    console.error('Database read error:', error);
     setConnectionStatus('error');
-    showToast("Firebase database permission error or invalid URL.", "error");
+    showToast('Firebase read error: ' + error.message, 'error');
   });
 };
 
-// Auth listener configurations
+// Auth listener configurations (optional — only used if auth is available)
 const setupAuthListener = () => {
+  if (!auth) return;
   auth.onAuthStateChanged((user) => {
+    const prevUid = currentUser ? currentUser.uid : null;
+    const newUid = user ? user.uid : null;
     currentUser = user;
     updateFirebaseUI();
-    setupDatabaseListener();
+    // Only re-setup listener if the user changed
+    if (prevUid !== newUid) {
+      setupDatabaseListener();
+    }
   });
+};
+
+const doInit = (config) => {
+  if (!config || !config.databaseURL) {
+    setConnectionStatus('disconnected');
+    return;
+  }
+
+  try {
+    firebaseApp = firebase.initializeApp(config);
+    database = firebaseApp.database();
+
+    // Connect to DB immediately (don't wait for auth)
+    setupDatabaseListener();
+
+    // Set up auth in parallel — it will switch to user path if they sign in
+    try {
+      auth = firebaseApp.auth();
+      setupAuthListener();
+    } catch (authErr) {
+      console.log('Auth not available (optional):', authErr.message);
+      auth = null;
+    }
+  } catch (err) {
+    console.error('doInit error:', err);
+    setConnectionStatus('error');
+    showToast('Firebase connection failed: ' + err.message, 'error');
+  }
 };
 
 // Initialize Firebase dynamically
@@ -254,25 +291,6 @@ const initFirebase = (config) => {
     showToast("Failed to connect to Firebase. Check config.", "error");
     setConnectionStatus('error');
     return false;
-  }
-};
-
-const doInit = (config) => {
-  if (!config || !config.databaseURL) {
-    setConnectionStatus('disconnected');
-    return;
-  }
-
-  firebaseApp = firebase.initializeApp(config);
-  database = firebaseApp.database();
-  
-  if (config.apiKey && config.authDomain) {
-    auth = firebaseApp.auth();
-    setupAuthListener();
-  } else {
-    auth = null;
-    currentUser = null;
-    setupDatabaseListener();
   }
 };
 
