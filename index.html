@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LKR WealthTracker | Offline Savings & Expense Ledger</title>
+  <title>LKR WealthTracker | Offline Savings &amp; Expense Ledger</title>
   <meta name="description"
     content="An elegant, client-side, offline personal finance tracker in Sri Lankan Rupees. Save locally and control your finances.">
   <link rel="stylesheet" href="styles.css">
@@ -17,10 +17,17 @@
     <header>
       <div class="logo-section">
         <h1 id="app-logo">RupeeSave</h1>
-        <p>Offline Wealth & Savings Ledger</p>
+        <p>Offline Wealth &amp; Savings Ledger</p>
       </div>
 
       <div class="action-buttons">
+        <button id="btn-sync-trigger" class="btn" title="Configure Firebase Cloud Sync">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" />
+          </svg>
+          Cloud Sync <span id="sync-status-badge" class="badge-disconnected">Offline</span>
+        </button>
+
         <button id="btn-export" class="btn" title="Export data to JSON file">
           <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
@@ -50,7 +57,7 @@
         <h3>Cumulative Savings</h3>
         <div style="display: flex; align-items: baseline;">
           <span class="currency-symbol">Rs.</span>
-          <span id="overall-savings" class="savings-amount">0.00</span>
+          <span id="overall-savings" class="savings-amount">735000.00</span>
         </div>
       </div>
 
@@ -263,60 +270,131 @@
     </div>
   </div>
 
-<!-- Add Firebase SDKs in index.html -->
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
+  <!-- Firebase Cloud Sync Settings Modal Overlay -->
+  <div class="modal-overlay" id="sync-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Firebase Sync Settings</h2>
+        <button id="sync-modal-close" class="btn-close">&times;</button>
+      </div>
+      
+      <!-- Modal Navigation Tabs -->
+      <div class="modal-tabs">
+        <button type="button" id="tab-firebase-config" class="tab-btn active">Connection Config</button>
+        <button type="button" id="tab-firebase-auth" class="tab-btn">User Account</button>
+      </div>
 
-<script>
-  // 1. Firebase config (replace with your actual values from Firebase console)
-  const firebaseConfig = {
-    apiKey: "AIzaSyAjuG2H8sGYreDtS-qPKQmIe9uKMKJv18g",
-    authDomain: "reytracksmoneyonline.firebaseapp.com",
-    databaseURL: "https://reytracksmoneyonline-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "reytracksmoneyonline",
-    storageBucket: "reytracksmoneyonline.firebasestorage.app",
-    messagingSenderId: "606090512333",
-    appId: "1:606090512333:web:bd0cb592e39ff14982a684"
-  };
+      <div class="modal-body">
+        <!-- Panel 1: Connection Configuration -->
+        <div id="panel-firebase-config" class="tab-panel active">
+          <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem; line-height: 1.4;">
+            Configure your Firebase project configuration below. You can find this in your Firebase Console under Project Settings &gt; Web App config.
+          </p>
 
-  // 2. Initialize Firebase
-  const app = firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
+          <div class="form-group">
+            <label for="fb-database-url">Database URL *</label>
+            <input type="text" id="fb-database-url" class="form-control" placeholder="https://your-rtdb-name.firebaseio.com">
+          </div>
 
-  // 3. Add a record
-  function addRecord(record) {
-    db.ref("records").push(record);
-  }
+          <div class="form-group">
+            <label for="fb-api-key">API Key (Optional / Auth Only)</label>
+            <input type="password" id="fb-api-key" class="form-control" placeholder="AIzaSy...">
+          </div>
 
-  // 4. Listen for realtime updates
-  db.ref("records").on("value", (snapshot) => {
-    const data = snapshot.val() || {};
-    const recordsArray = Object.values(data);
-    displayRecords(recordsArray); // call your existing UI update function
-  });
+          <div class="form-group">
+            <label for="fb-auth-domain">Auth Domain (Optional / Auth Only)</label>
+            <input type="text" id="fb-auth-domain" class="form-control" placeholder="your-project.firebaseapp.com">
+          </div>
 
-  // Example: Hook into your form
-  document.getElementById("addRecordForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const amount = document.getElementById("amount").value;
-    const note = document.getElementById("note").value;
+          <div class="form-group">
+            <label for="fb-project-id">Project ID (Optional)</label>
+            <input type="text" id="fb-project-id" class="form-control" placeholder="your-project-id">
+          </div>
 
-    addRecord({
-      amount: amount,
-      note: note,
-      timestamp: Date.now()
-    });
+          <div class="form-group">
+            <label for="fb-app-id">App ID (Optional)</label>
+            <input type="text" id="fb-app-id" class="form-control" placeholder="1:123456:web:abcd...">
+          </div>
 
-    e.target.reset();
-  });
-</script>
+          <div class="connection-status-box glass-panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem;">
+              <span>Database State:</span>
+              <span id="fb-connection-status" class="status-disconnected">Offline Mode (Local)</span>
+            </div>
+            <div id="fb-auth-status-row" style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem;">
+              <span>Authenticated User:</span>
+              <span id="fb-auth-status">Guest / Public Database</span>
+            </div>
+          </div>
 
+          <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.25rem;">
+            <button id="btn-save-firebase-config" class="btn btn-primary" style="justify-content: center; width: 100%;">
+              Connect Database
+            </button>
+            <button id="btn-migrate-local-data" class="btn" style="justify-content: center; width: 100%; border-color: var(--primary); display: none;">
+              Upload Offline Data to Cloud
+            </button>
+            <button id="btn-disconnect-firebase" class="btn" style="justify-content: center; width: 100%; border-color: rgba(244, 63, 94, 0.2); background: rgba(244, 63, 94, 0.05); color: var(--expense); display: none;">
+              Disconnect Database
+            </button>
+          </div>
+        </div>
+
+        <!-- Panel 2: User Authentication -->
+        <div id="panel-firebase-auth" class="tab-panel">
+          <!-- Logged out state -->
+          <div id="fb-logged-out-section">
+            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem; line-height: 1.4;">
+              Sign in to secure your transaction ledger. In authenticated mode, your transactions are saved under your personal account and cannot be read by anyone else.
+            </p>
+
+            <form id="fb-auth-form">
+              <div class="form-group">
+                <label for="fb-auth-email">Email Address</label>
+                <input type="email" id="fb-auth-email" class="form-control" placeholder="you@example.com">
+              </div>
+
+              <div class="form-group">
+                <label for="fb-auth-password">Password</label>
+                <input type="password" id="fb-auth-password" class="form-control" placeholder="••••••••">
+              </div>
+
+              <div style="display: flex; gap: 0.75rem; margin-top: 1.25rem;">
+                <button type="submit" id="btn-fb-signin" class="btn btn-primary" style="flex: 1; justify-content: center;">
+                  Sign In
+                </button>
+                <button type="button" id="btn-fb-register" class="btn" style="flex: 1; justify-content: center;">
+                  Register
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Logged in state -->
+          <div id="fb-logged-in-section" style="display: none; text-align: center; padding: 1.5rem 0;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">👤</div>
+            <h3 style="color: var(--white); margin-bottom: 0.5rem;">Secured Account Active</h3>
+            <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
+              Logged in as: <br><strong id="fb-user-email" style="color: var(--primary);">email@example.com</strong>
+            </p>
+            <button id="btn-fb-signout" class="btn" style="justify-content: center; width: 100%; border-color: rgba(244, 63, 94, 0.3);">
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Toast system wrapper -->
   <div class="toast-container" id="toast-wrapper"></div>
 
+  <!-- Firebase Compat SDK Libraries -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+
   <!-- Main JavaScript File -->
   <script src="app.js"></script>
 </body>
-
 </html>

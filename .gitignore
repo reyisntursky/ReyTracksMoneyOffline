@@ -1,0 +1,2 @@
+# Ignore local backups
+rupeesave_backup_*.json

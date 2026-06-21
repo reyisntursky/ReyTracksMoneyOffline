@@ -1,3 +1,10 @@
+// Firebase Globals
+let firebaseApp = null;
+let database = null;
+let auth = null;
+let databaseRef = null;
+let currentUser = null;
+
 // State management
 let state = {
   transactions: [],
@@ -97,8 +104,273 @@ const showToast = (message, type = 'success') => {
   }, 4000);
 };
 
-// Init application state
-const init = () => {
+// Connection Status Badge and Modal indicators
+const setConnectionStatus = (status) => {
+  const headerBadge = document.getElementById('sync-status-badge');
+  const modalStatus = document.getElementById('fb-connection-status');
+  
+  if (!headerBadge || !modalStatus) return;
+  
+  headerBadge.className = '';
+  modalStatus.className = '';
+  
+  if (status === 'connected') {
+    headerBadge.textContent = 'Synced';
+    headerBadge.className = 'badge-connected';
+    modalStatus.textContent = 'Connected (Cloud)';
+    modalStatus.className = 'status-connected';
+  } else if (status === 'syncing') {
+    headerBadge.textContent = 'Syncing';
+    headerBadge.className = 'badge-syncing';
+    modalStatus.textContent = 'Connecting...';
+    modalStatus.className = 'status-syncing';
+  } else if (status === 'error') {
+    headerBadge.textContent = 'Error';
+    headerBadge.className = 'badge-error';
+    modalStatus.textContent = 'Connection Error';
+    modalStatus.className = 'status-error';
+  } else {
+    headerBadge.textContent = 'Offline';
+    headerBadge.className = 'badge-disconnected';
+    modalStatus.textContent = 'Offline Mode (Local)';
+    modalStatus.className = 'status-disconnected';
+  }
+};
+
+// Update Firebase config and user details in UI
+const updateFirebaseUI = () => {
+  const loggedOutSection = document.getElementById('fb-logged-out-section');
+  const loggedInSection = document.getElementById('fb-logged-in-section');
+  const userEmailSpan = document.getElementById('fb-user-email');
+  const authStatusSpan = document.getElementById('fb-auth-status');
+  const migrateBtn = document.getElementById('btn-migrate-local-data');
+  const disconnectBtn = document.getElementById('btn-disconnect-firebase');
+  
+  if (currentUser) {
+    if (loggedOutSection) loggedOutSection.style.display = 'none';
+    if (loggedInSection) loggedInSection.style.display = 'block';
+    if (userEmailSpan) userEmailSpan.textContent = currentUser.email;
+    if (authStatusSpan) {
+      authStatusSpan.textContent = currentUser.email;
+      authStatusSpan.style.color = 'var(--primary)';
+    }
+  } else {
+    if (loggedOutSection) loggedOutSection.style.display = 'block';
+    if (loggedInSection) loggedInSection.style.display = 'none';
+    if (authStatusSpan) {
+      authStatusSpan.textContent = auth ? "Guest / Public Database" : "No Auth Configured";
+      authStatusSpan.style.color = 'var(--text-secondary)';
+    }
+  }
+  
+  // Show migration button if we have local transactions and a connected DB
+  const localData = localStorage.getItem('rupee_save_data');
+  if (database && localData) {
+    try {
+      const localTxs = JSON.parse(localData);
+      if (Array.isArray(localTxs) && localTxs.length > 0) {
+        if (migrateBtn) migrateBtn.style.display = 'block';
+      } else {
+        if (migrateBtn) migrateBtn.style.display = 'none';
+      }
+    } catch(e) {
+      if (migrateBtn) migrateBtn.style.display = 'none';
+    }
+  } else {
+    if (migrateBtn) migrateBtn.style.display = 'none';
+  }
+  
+  if (disconnectBtn) {
+    disconnectBtn.style.display = database ? 'block' : 'none';
+  }
+};
+
+// Database listener configurations
+const setupDatabaseListener = () => {
+  let path = 'public/transactions';
+  if (currentUser) {
+    path = `users/${currentUser.uid}/transactions`;
+  }
+  
+  setConnectionStatus('syncing');
+  databaseRef = database.ref(path);
+  
+  databaseRef.on('value', (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      const list = [];
+      Object.keys(data).forEach(key => {
+        list.push({
+          id: key,
+          ...data[key]
+        });
+      });
+      state.transactions = list;
+    } else {
+      state.transactions = [];
+    }
+    render();
+    setConnectionStatus('connected');
+    updateFirebaseUI();
+  }, (error) => {
+    console.error("Database read error:", error);
+    setConnectionStatus('error');
+    showToast("Firebase database permission error or invalid URL.", "error");
+  });
+};
+
+// Auth listener configurations
+const setupAuthListener = () => {
+  auth.onAuthStateChanged((user) => {
+    currentUser = user;
+    updateFirebaseUI();
+    setupDatabaseListener();
+  });
+};
+
+// Initialize Firebase dynamically
+const initFirebase = (config) => {
+  try {
+    if (databaseRef) {
+      databaseRef.off();
+    }
+
+    if (firebase.apps.length > 0) {
+      firebase.apps[0].delete().then(() => {
+        doInit(config);
+      });
+      return true;
+    }
+
+    doInit(config);
+    return true;
+  } catch (error) {
+    console.error("Firebase init error:", error);
+    showToast("Failed to connect to Firebase. Check config.", "error");
+    setConnectionStatus('error');
+    return false;
+  }
+};
+
+const doInit = (config) => {
+  if (!config || !config.databaseURL) {
+    setConnectionStatus('disconnected');
+    return;
+  }
+
+  firebaseApp = firebase.initializeApp(config);
+  database = firebaseApp.database();
+  
+  if (config.apiKey && config.authDomain) {
+    auth = firebaseApp.auth();
+    setupAuthListener();
+  } else {
+    auth = null;
+    currentUser = null;
+    setupDatabaseListener();
+  }
+};
+
+// Disconnect from Firebase
+const disconnectFirebase = () => {
+  if (databaseRef) {
+    databaseRef.off();
+  }
+  if (firebase.apps.length > 0) {
+    firebase.apps[0].delete();
+  }
+  firebaseApp = null;
+  database = null;
+  auth = null;
+  currentUser = null;
+  databaseRef = null;
+  
+  localStorage.removeItem('rupee_save_firebase_config');
+  
+  loadFromLocalStorage();
+  render();
+  showToast("Disconnected from Firebase. Back to local mode.");
+  setConnectionStatus('disconnected');
+  updateFirebaseUI();
+};
+
+// Migrate Local transactions to Cloud
+const migrateLocalDataToFirebase = () => {
+  if (!database) {
+    showToast("Firebase is not connected.", "error");
+    return;
+  }
+  
+  const localDataStr = localStorage.getItem('rupee_save_data');
+  if (!localDataStr) {
+    showToast("No local data found to migrate.", "error");
+    return;
+  }
+  
+  try {
+    const localTxs = JSON.parse(localDataStr);
+    if (!Array.isArray(localTxs) || localTxs.length === 0) {
+      showToast("No local transactions to migrate.", "error");
+      return;
+    }
+    
+    if (confirm(`Upload ${localTxs.length} local transactions to your Firebase database?`)) {
+      let path = currentUser ? `users/${currentUser.uid}/transactions` : 'public/transactions';
+      const dbRef = database.ref(path);
+      
+      let uploadCount = 0;
+      localTxs.forEach(t => {
+        const cleanTx = {
+          amount: t.amount,
+          date: t.date,
+          category: t.category,
+          description: t.description || '',
+          type: t.type
+        };
+        
+        dbRef.push().set(cleanTx);
+        uploadCount++;
+      });
+      
+      showToast(`Migrated ${uploadCount} transactions to the cloud!`);
+      localStorage.removeItem('rupee_save_data');
+      updateFirebaseUI();
+    }
+  } catch (e) {
+    console.error("Migration error:", e);
+    showToast("Failed to migrate data.", "error");
+  }
+};
+
+const loadFirebaseConfigInputs = () => {
+  const configStr = localStorage.getItem('rupee_save_firebase_config');
+  const dbUrlInput = document.getElementById('fb-database-url');
+  const apiKeyInput = document.getElementById('fb-api-key');
+  const authDomainInput = document.getElementById('fb-auth-domain');
+  const projectIdInput = document.getElementById('fb-project-id');
+  const appIdInput = document.getElementById('fb-app-id');
+  
+  if (configStr) {
+    try {
+      const config = JSON.parse(configStr);
+      if (dbUrlInput) dbUrlInput.value = config.databaseURL || '';
+      if (apiKeyInput) apiKeyInput.value = config.apiKey || '';
+      if (authDomainInput) authDomainInput.value = config.authDomain || '';
+      if (projectIdInput) projectIdInput.value = config.projectId || '';
+      if (appIdInput) appIdInput.value = config.appId || '';
+    } catch(e) {
+      console.error(e);
+    }
+  } else {
+    if (dbUrlInput) dbUrlInput.value = 'https://reytracksmoneyonline-default-rtdb.asia-southeast1.firebasedatabase.app';
+    if (apiKeyInput) apiKeyInput.value = 'AIzaSyAjuG2H8sGYreDtS-qPKQmIe9uKMKJv18g';
+    if (authDomainInput) authDomainInput.value = 'reytracksmoneyonline.firebaseapp.com';
+    if (projectIdInput) projectIdInput.value = 'reytracksmoneyonline';
+    if (appIdInput) appIdInput.value = '1:606090512333:web:bd0cb592e39ff14982a684';
+  }
+};
+
+const loadFromLocalStorage = () => {
   const CURRENT_DB_VERSION = 3;
   const dbVersion = localStorage.getItem('rupee_save_db_version');
   const storedData = localStorage.getItem('rupee_save_data');
@@ -111,9 +383,45 @@ const init = () => {
       state.transactions = [];
     }
   } else {
-    // If the database version is missing or outdated, load the new 735,000 LKR configuration
     injectMockData();
     localStorage.setItem('rupee_save_db_version', CURRENT_DB_VERSION.toString());
+  }
+};
+
+// Init application state
+const init = () => {
+  loadFirebaseConfigInputs();
+  
+  let configStr = localStorage.getItem('rupee_save_firebase_config');
+  let config = null;
+  
+  if (configStr) {
+    try {
+      config = JSON.parse(configStr);
+    } catch(e) {
+      console.error(e);
+    }
+  } else {
+    // Default credentials provided by the user
+    config = {
+      apiKey: "AIzaSyAjuG2H8sGYreDtS-qPKQmIe9uKMKJv18g",
+      authDomain: "reytracksmoneyonline.firebaseapp.com",
+      databaseURL: "https://reytracksmoneyonline-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "reytracksmoneyonline",
+      appId: "1:606090512333:web:bd0cb592e39ff14982a684"
+    };
+    // Save these defaults so they appear configured immediately
+    localStorage.setItem('rupee_save_firebase_config', JSON.stringify(config));
+  }
+  
+  let firebaseActive = false;
+  if (config) {
+    firebaseActive = initFirebase(config);
+  }
+  
+  if (!firebaseActive) {
+    loadFromLocalStorage();
+    setConnectionStatus('disconnected');
   }
   
   // Set default date in form to today
@@ -121,10 +429,16 @@ const init = () => {
   
   // Add listeners
   setupEventListeners();
+  setupTabListeners();
+  setupAuthListeners();
   
   // Initial render
   render();
-  showToast('Welcome to RupeeSave! Ready offline.');
+  updateFirebaseUI();
+  
+  if (!firebaseActive) {
+    showToast('Welcome to RupeeSave! Ready offline.');
+  }
 };
 
 // Inject elegant default mock data so app doesn't look empty on startup
@@ -547,7 +861,6 @@ const renderCategorySelectionGrid = () => {
 // CRUD Transactions
 const addTransaction = (amount, date, category, description, type) => {
   const tx = {
-    id: Date.now().toString(),
     amount: parseFloat(amount),
     date,
     category,
@@ -555,21 +868,48 @@ const addTransaction = (amount, date, category, description, type) => {
     type
   };
   
-  state.transactions.push(tx);
-  saveToLocalStorage();
-  
-  // Set selectedMonth focus to the month of the added transaction so the user sees it immediately!
-  state.selectedMonth = date.substring(0, 7);
-  
-  render();
-  showToast('Record saved successfully!');
+  if (database) {
+    let path = currentUser ? `users/${currentUser.uid}/transactions` : 'public/transactions';
+    const newTxRef = database.ref(path).push();
+    newTxRef.set(tx)
+      .then(() => {
+        state.selectedMonth = date.substring(0, 7);
+        showToast('Record saved to cloud!');
+      })
+      .catch((err) => {
+        console.error("Failed to save to cloud:", err);
+        showToast('Failed to save to cloud.', 'error');
+      });
+  } else {
+    const txLocal = {
+      id: Date.now().toString(),
+      ...tx
+    };
+    state.transactions.push(txLocal);
+    saveToLocalStorage();
+    state.selectedMonth = date.substring(0, 7);
+    render();
+    showToast('Record saved locally!');
+  }
 };
 
 const deleteTransaction = (id) => {
-  state.transactions = state.transactions.filter(t => t.id !== id);
-  saveToLocalStorage();
-  render();
-  showToast('Record removed.', 'error');
+  if (database) {
+    let path = currentUser ? `users/${currentUser.uid}/transactions/${id}` : `public/transactions/${id}`;
+    database.ref(path).remove()
+      .then(() => {
+        showToast('Record removed from cloud.', 'error');
+      })
+      .catch((err) => {
+        console.error("Failed to remove from cloud:", err);
+        showToast('Failed to remove from cloud.', 'error');
+      });
+  } else {
+    state.transactions = state.transactions.filter(t => t.id !== id);
+    saveToLocalStorage();
+    render();
+    showToast('Record removed.', 'error');
+  }
 };
 
 // Backup operations
@@ -612,11 +952,36 @@ const handleImport = (event) => {
       if (data.appName === 'RupeeSave' && Array.isArray(data.transactions)) {
         // Simple confirmation before overwrite
         if (confirm(`Found ${data.transactions.length} records in backup. Overwrite existing current database?`)) {
-          state.transactions = data.transactions;
-          state.selectedMonth = null;
-          saveToLocalStorage();
-          render();
-          showToast('Database imported & restored successfully!');
+          if (database) {
+            let path = currentUser ? `users/${currentUser.uid}/transactions` : 'public/transactions';
+            const keyedMap = {};
+            data.transactions.forEach((tx, idx) => {
+              const txId = tx.id || `imported_${Date.now()}_${idx}`;
+              keyedMap[txId] = {
+                amount: tx.amount,
+                date: tx.date,
+                category: tx.category,
+                description: tx.description || '',
+                type: tx.type
+              };
+            });
+            
+            database.ref(path).set(keyedMap)
+              .then(() => {
+                state.selectedMonth = null;
+                showToast('Database imported & synced to cloud successfully!');
+              })
+              .catch((err) => {
+                console.error("Failed to sync import to Firebase:", err);
+                showToast('Failed to sync import to Firebase.', 'error');
+              });
+          } else {
+            state.transactions = data.transactions;
+            state.selectedMonth = null;
+            saveToLocalStorage();
+            render();
+            showToast('Database imported & restored successfully!');
+          }
         }
       } else {
         showToast('Invalid backup file structure.', 'error');
@@ -629,6 +994,102 @@ const handleImport = (event) => {
   
   // Reset file input so same file can be imported again if needed
   elements.importFileInput.value = '';
+};
+
+const setupTabListeners = () => {
+  const tabConfig = document.getElementById('tab-firebase-config');
+  const tabAuth = document.getElementById('tab-firebase-auth');
+  const panelConfig = document.getElementById('panel-firebase-config');
+  const panelAuth = document.getElementById('panel-firebase-auth');
+  
+  if (tabConfig && tabAuth && panelConfig && panelAuth) {
+    tabConfig.addEventListener('click', () => {
+      tabConfig.classList.add('active');
+      tabAuth.classList.remove('active');
+      panelConfig.classList.add('active');
+      panelAuth.classList.remove('active');
+    });
+    
+    tabAuth.addEventListener('click', () => {
+      tabAuth.classList.add('active');
+      tabConfig.classList.remove('active');
+      panelAuth.classList.add('active');
+      panelConfig.classList.remove('active');
+    });
+  }
+};
+
+const setupAuthListeners = () => {
+  const authForm = document.getElementById('fb-auth-form');
+  const btnRegister = document.getElementById('btn-fb-register');
+  const btnSignOut = document.getElementById('btn-fb-signout');
+  const emailInput = document.getElementById('fb-auth-email');
+  const passwordInput = document.getElementById('fb-auth-password');
+  
+  if (authForm) {
+    authForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!auth) {
+        showToast("Firebase authentication is not configured. Add API Key and Auth Domain.", "error");
+        return;
+      }
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+      
+      auth.signInWithEmailAndPassword(email, password)
+        .then(() => {
+          showToast("Signed in successfully!");
+          emailInput.value = '';
+          passwordInput.value = '';
+        })
+        .catch((error) => {
+          console.error("Sign in error:", error);
+          showToast(`Sign in failed: ${error.message}`, "error");
+        });
+    });
+  }
+  
+  if (btnRegister) {
+    btnRegister.addEventListener('click', () => {
+      if (!auth) {
+        showToast("Firebase authentication is not configured. Add API Key and Auth Domain.", "error");
+        return;
+      }
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+      
+      if (!email || !password) {
+        showToast("Please enter an email and password to register.", "error");
+        return;
+      }
+      
+      auth.createUserWithEmailAndPassword(email, password)
+        .then(() => {
+          showToast("Account created and signed in!");
+          emailInput.value = '';
+          passwordInput.value = '';
+        })
+        .catch((error) => {
+          console.error("Registration error:", error);
+          showToast(`Registration failed: ${error.message}`, "error");
+        });
+    });
+  }
+  
+  if (btnSignOut) {
+    btnSignOut.addEventListener('click', () => {
+      if (auth) {
+        auth.signOut()
+          .then(() => {
+            showToast("Signed out successfully.");
+          })
+          .catch((error) => {
+            console.error("Sign out error:", error);
+            showToast("Failed to sign out.", "error");
+          });
+      }
+    });
+  }
 };
 
 // Event Listeners Configuration
@@ -683,11 +1144,24 @@ const setupEventListeners = () => {
   // Reset Database
   elements.btnClearAll.addEventListener('click', () => {
     if (confirm('Are you absolutely sure you want to clear all data? This cannot be undone.')) {
-      state.transactions = [];
-      state.selectedMonth = null;
-      saveToLocalStorage();
-      render();
-      showToast('All data cleared. Database is empty.', 'error');
+      if (database) {
+        let path = currentUser ? `users/${currentUser.uid}/transactions` : 'public/transactions';
+        set(ref(database, path), null)
+          .then(() => {
+            state.selectedMonth = null;
+            showToast('All cloud data cleared. Database is empty.', 'error');
+          })
+          .catch((err) => {
+            console.error("Failed to clear cloud data:", err);
+            showToast('Failed to clear cloud data.', 'error');
+          });
+      } else {
+        state.transactions = [];
+        state.selectedMonth = null;
+        saveToLocalStorage();
+        render();
+        showToast('All local data cleared. Database is empty.', 'error');
+      }
     }
   });
   
@@ -699,6 +1173,63 @@ const setupEventListeners = () => {
   });
   
   elements.importFileInput.addEventListener('change', handleImport);
+
+  // Sync settings modal toggles
+  const syncModal = document.getElementById('sync-modal');
+  const btnSyncTrigger = document.getElementById('btn-sync-trigger');
+  const syncModalClose = document.getElementById('sync-modal-close');
+  
+  if (btnSyncTrigger) {
+    btnSyncTrigger.addEventListener('click', () => {
+      syncModal.classList.add('active');
+    });
+  }
+  
+  if (syncModalClose) {
+    syncModalClose.addEventListener('click', () => {
+      syncModal.classList.remove('active');
+    });
+  }
+  
+  const btnSaveConfig = document.getElementById('btn-save-firebase-config');
+  if (btnSaveConfig) {
+    btnSaveConfig.addEventListener('click', () => {
+      const config = {
+        databaseURL: document.getElementById('fb-database-url').value.trim(),
+        apiKey: document.getElementById('fb-api-key').value.trim(),
+        authDomain: document.getElementById('fb-auth-domain').value.trim(),
+        projectId: document.getElementById('fb-project-id').value.trim(),
+        appId: document.getElementById('fb-app-id').value.trim()
+      };
+      
+      if (!config.databaseURL) {
+        showToast("Database URL is required.", "error");
+        return;
+      }
+      
+      localStorage.setItem('rupee_save_firebase_config', JSON.stringify(config));
+      if (initFirebase(config)) {
+        showToast("Firebase configuration updated!");
+      }
+    });
+  }
+  
+  const btnDisconnect = document.getElementById('btn-disconnect-firebase');
+  if (btnDisconnect) {
+    btnDisconnect.addEventListener('click', () => {
+      if (confirm("Disconnect from Firebase and revert to local storage? Your local storage data will remain intact.")) {
+        disconnectFirebase();
+        syncModal.classList.remove('active');
+      }
+    });
+  }
+  
+  const btnMigrate = document.getElementById('btn-migrate-local-data');
+  if (btnMigrate) {
+    btnMigrate.addEventListener('click', () => {
+      migrateLocalDataToFirebase();
+    });
+  }
 };
 
 // Run on window load
